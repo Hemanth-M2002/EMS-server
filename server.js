@@ -48,7 +48,8 @@ const storage = multer.diskStorage({
     cb(null, Date.now() + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage });
+
+const upload = multer({ storage: storage });
 
 
 // Create & Save Employee
@@ -90,7 +91,7 @@ app.get('/view/:id', async (req, res) => {
 });
 
 // Update & Save Employee
-app.put('/edit', upload.single('image'), async (req, res) => {
+app.put('/edit/:id', upload.single('image'), async (req, res) => {
   try {
     const updatedData = {
       ...req.body,
