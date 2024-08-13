@@ -3,16 +3,21 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const dotenv = require('dotenv')
+const dotenv = require('dotenv');
+const cloudinary = require('cloudinary').v2;
 
-dotenv.config({ path: "config.env" })
+// Configure environment variables
+dotenv.config();
+
+
 const app = express();
 const PORT = 4000;
 
 // Middleware
 app.use(cors());
-app.use(express.json()); // Simplified to use express.json()
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.json());
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
 mongoose.connect("mongodb+srv://hemanthvijay02:AfMS7RxUtTdXonLd@cluster0.6a9ye.mongodb.net/ems")
@@ -32,39 +37,59 @@ const employeeSchema = new mongoose.Schema({
   designation: String,
   gender: String,
   courses: [String],
-  image: String
+  image: [String]
 }, {
-  timestamps: true // Added timestamps for consistency
+  timestamps: true
 });
+
 
 const Employee = mongoose.model('Employee', employeeSchema);
 
-// Multer configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-
+// Multer configuration for handling file uploads
+const storage = multer.memoryStorage(); // Use memory storage for direct upload to Cloudinary
 const upload = multer({ storage: storage });
+
+// Helper function to upload image to Cloudinary
+const uploadToCloudinary = (buffers) => {
+  return Promise.all(buffers.map(buffer => {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { resource_type: 'image' },
+        (error, result) => {
+          if (result) {
+            resolve(result.secure_url);
+          } else {
+            reject(error);
+          }
+        }
+      );
+      streamifier.createReadStream(buffer).pipe(stream);
+    });
+  }));
+};
 
 
 // Create & Save Employee
-app.post('/create', upload.single('image'), async (req, res) => {
+app.post('/create', upload.array('images'), async (req, res) => {
   try {
+    let imageUrls = [];
+
+    if (req.files) {
+      imageUrls = await uploadToCloudinary(req.files.map(file => file.buffer));
+    }
+
     const newEmployee = new Employee({
       ...req.body,
-      image: req.file ? req.file.path : null
+      images: imageUrls
     });
+
     await newEmployee.save();
     res.status(201).json({ success: true, message: 'Employee added successfully', data: newEmployee });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error adding employee', error });
   }
 });
+
 
 // Read all Employees
 app.get('/view', async (req, res) => {
@@ -75,6 +100,7 @@ app.get('/view', async (req, res) => {
     res.status(500).json({ success: false, message: 'Error fetching employees', error });
   }
 });
+
 
 // Read a single Employee by ID
 app.get('/view/:id', async (req, res) => {
@@ -91,12 +117,20 @@ app.get('/view/:id', async (req, res) => {
 });
 
 // Update & Save Employee
-app.put('/edit/:id', upload.single('image'), async (req, res) => {
+app.put('/edit/:id', upload.array('images'), async (req, res) => {
   try {
+    let imageUrls = req.body.images || [];
+
+    if (req.files) {
+      const newImageUrls = await uploadToCloudinary(req.files.map(file => file.buffer));
+      imageUrls = [...imageUrls, ...newImageUrls];
+    }
+
     const updatedData = {
       ...req.body,
-      image: req.file ? req.file.path : req.body.image
+      images: imageUrls
     };
+
     const employee = await Employee.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     if (employee) {
       res.json({ success: true, message: 'Employee updated successfully', data: employee });
@@ -107,6 +141,7 @@ app.put('/edit/:id', upload.single('image'), async (req, res) => {
     res.status(500).json({ success: false, message: 'Error updating employee', error });
   }
 });
+
 
 // Delete Employee
 app.delete('/delete/:id', async (req, res) => {
