@@ -95,7 +95,11 @@ app.post('/create', upload.array('images'), async (req, res) => {
 app.get('/view', async (req, res) => {
   try {
     const employees = await Employee.find({});
-    res.json({ success: true, data: employees });
+    res.json({ success: true, data: employees.map(employee => ({
+      ...employee.toObject(),
+      created: employee.created,
+      updated: employee.updated
+    })) });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching employees', error });
   }
@@ -107,7 +111,14 @@ app.get('/view/:id', async (req, res) => {
   try {
     const employee = await Employee.findById(req.params.id);
     if (employee) {
-      res.json({ success: true, data: employee });
+      res.json({
+        success: true,
+        data: {
+          ...employee.toObject(),
+          created: employee.created,
+          updated: employee.updated
+        }
+      });
     } else {
       res.status(404).json({ success: false, message: 'Employee not found' });
     }
@@ -133,7 +144,15 @@ app.put('/edit/:id', upload.array('images'), async (req, res) => {
 
     const employee = await Employee.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     if (employee) {
-      res.json({ success: true, message: 'Employee updated successfully', data: employee });
+      res.json({
+        success: true,
+        message: 'Employee updated successfully',
+        data: {
+          ...employee.toObject(),
+          createdAt: employee.createdAt,
+          updatedAt: employee.updatedAt
+        }
+      });
     } else {
       res.status(404).json({ success: false, message: 'Employee not found' });
     }
